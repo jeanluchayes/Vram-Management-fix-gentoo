@@ -1,22 +1,20 @@
 # Linux VRAM Manager
 
 
-A Bash-based utility for Linux gaming systems using the kernel DMEM cgroup interface. It installs or enables the available VRAM-management stack, selects a desktop-appropriate integration when one exists, applies a persistent `dmem.max` VRAM headroom limit, verifies the configuration, and can remove the custom setup.
+A Bash-based utility for Linux gaming systems using the kernel DMEM cgroup interface. It installs and enables the available VRAM-management stack, selects a desktop-appropriate integration when one exists, applies a persistent `dmem.max` VRAM headroom limit, verifies the configuration, and optinally allows for reverting all changes.
 
 > **Experimental:** the `dmem.max` ceiling is a workaround intended to leave a small amount of VRAM headroom instead of allowing `app.slice` to consume the full reported DMEM capacity. Results can vary by GPU, driver, kernel, game, workload, and desktop environment.
 
 ## Features
 
 - Install and enable the base DMEM/VRAM-management stack
-- Detect AMD/Intel-style `vram` and NVIDIA-style `vidmem` DMEM regions
+- Detect AMD, Intel, NVIDIA DMEM regions
 - Detect the current user and systemd cgroup path automatically
-- Detect many Linux desktops and Wayland compositors
-- Select a desktop-specific foreground integration where a verified project exists
-- Use Gamescope as the generic fallback instead of installing a Plasma-only component on other desktops
-- Choose or change the VRAM safety margin in MiB
-- Apply the ceiling persistently with a systemd oneshot service
+- Detect DE and Wayland compositors
+- Select a DE-specific foreground integration where a verified project exists
+- change the VRAM safety margin in MiB
+- create a systemd oneshot service that Applies the ceiling persistently
 - Verify `dmem.capacity`, `dmem.max`, `dmem.current`, and service state
-- Prompt before rebooting when a restart/reboot is actually needed
 - Remove installed VRAM-management packages when requested
 
 ## Desktop / compositor support
@@ -27,7 +25,7 @@ Compatible desktop integrations:
 - Hyprland
 - Niri
 
-Other desktops and window managers use Gamescope as the generic fallback.
+Other desktops and window managers should use Gamescope as the generic fallback.
 
 ## How it works
 
@@ -65,22 +63,7 @@ Automatic package installation currently targets Arch-family and Fedora-family s
 
 ## GPU support
 
-The script does not hard-code a GPU vendor. It recognizes device-memory regions named like:
-
-```text
-*/vram
-*/vram0
-*/vidmem
-*/vidmem0
-```
-
 For NVIDIA, working support still depends on a driver/kernel combination that exposes video memory through Linux DMEM. An NVIDIA GPU by itself does not guarantee that `dmem.capacity` will contain a usable `vidmem` entry.
-
-## Reboot behavior
-
-Applying the `dmem.max` ceiling takes effect immediately and **does not inherently require a reboot**. After applying it, the tool explicitly asks whether you want to reboot anyway to verify persistence.
-
-A reboot is requested when the selected installation changes something that needs a fresh session/kernel, such as installing a new DMEM-capable kernel. Some desktop integrations only need a session restart; the tool tells you when that applies.
 
 ## Installation / usage
 
