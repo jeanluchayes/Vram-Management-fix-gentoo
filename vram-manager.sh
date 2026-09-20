@@ -488,10 +488,11 @@ write_helper_dmem_plus() {
 
 # Navigate to the cgroup v2 mount point
 #cd /sys/fs/cgroup
-cd /sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service
+#cd /sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service
+CGROUP_PATH="/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service"
 
 # Recursively enable +dmem in all cgroup.subtree_control files
-find . -type d | while read -r dir; do
+find "CGROUP_PATH" -type d | while read -r dir; do
     if [ -f "$dir/cgroup.controllers" ] && grep -q "dmem" "$dir/cgroup.controllers"; then
         echo "+dmem" | tee "$dir/cgroup.subtree_control" > /dev/null
     fi
@@ -510,8 +511,8 @@ write_service_dmem_plus() {
     sudo tee "$SERVICE_DMEM_PLUS" >/dev/null <<EOF2
 [Unit]
 Description=Enable dmem on all cgroup2 Child Nodes if possible
-After=user@${uid}.service
-Requires=user@${uid}.service
+Before=dmemcg-appslice-limit.service
+After=dmemcg-booster-user.service graphical-session.target
 
 [Service]
 Type=oneshot
@@ -529,11 +530,10 @@ write_service() {
     sudo tee "$SERVICE" >/dev/null <<EOF2
 [Unit]
 Description=Apply app.slice VRAM safety limit
-After=user@${uid}.service
-Requires=user@${uid}.service
+After=dmemcg-booster-user.service graphical-session.target
 #This will Start and enable the +_dmem in the cgroup.sub_controllers
 #Firstly Before Trying to Read the Paths
-Requires=enable_dmem_cgroup.service
+Wants=enable_dmem_cgroup.service
 
 [Service]
 Type=oneshot
