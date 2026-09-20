@@ -500,6 +500,7 @@ find "$CGROUP_PATH" -type d | while read -r dir; do
 done
 
 #Script May Fail on Some, that is Fine?
+echo "+dmem Set on cgroup.subtree_control"
 exit 0
 SCRIPT
     sudo chmod 755 "$HELPER_DMEM_PLUS"
