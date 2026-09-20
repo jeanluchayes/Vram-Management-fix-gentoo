@@ -8,7 +8,9 @@ set -u
 
 VERSION=1.1.1
 SERVICE=/etc/systemd/system/dmemcg-appslice-limit.service
-HELPER=/usr/local/sbin/set-dmem-appslice-limit
+HELPER=/usr/local/bin/set-dmem-appslice-limit
+SERVICE_DMEM_PLUS=/etc/systemd/system/enable_dmem_cgroup.service
+HELPER_DMEM_PLUS=/usr/local/bin/enable_dmem_cgroup.sh
 CONFIG=/etc/default/dmemcg-appslice-limit
 STATE=/var/lib/linux-vram-manager/installed-packages
 UID_NOW=$(id -u)
@@ -419,12 +421,12 @@ prepare_kernel() {
 
 install_vram() {
     say 'Install / enable VRAM management'
-    ensure_base_dmem || return 1
-    install_desktop_integration
-    prepare_kernel || return 1
-    print_desktop_support
-    services_status
-    package_status
+    #ensure_base_dmem || return 1 --dmemcg-booster Already Insalled in My Gentoo
+    #install_desktop_integration --hyprland-focused-booster.service Already Insalled in My Gentoo
+    prepare_kernel || return 1 #--Checks for /sys/fs/cgroup/dmem.capacity - IS OK
+    print_desktop_support #--Checks for Compositor - Hyperland - IS OK
+    services_status #--Checks dmemcg-booster status - Systemd system Service - IS OK
+    #package_status #--Checks for necessary Packages, Already have them as Above.
     if ((REBOOT_NEEDED)); then
         printf '\nA restart/reboot is needed to complete the selected changes. Reboot now? [y/N]: '
         read -r answer || answer=''
@@ -450,7 +452,8 @@ CGREL=$(systemctl show "user@${USER_ID}.service" -p ControlGroup --value 2>/dev/
 APP="$ROOT$CGREL/app.slice"
 for i in $(seq 1 300); do
     [ -r "$APP/dmem.max" ] && [ -r "$APP/dmem.current" ] && [ -r "$ROOT/dmem.capacity" ] && break
-    sleep 1
+    #sleep 1 #Lasts 5 Minutes
+    sleep 0.01 #Lasts 3 Seconds
 done
 [ -r "$APP/dmem.max" ] && [ -r "$APP/dmem.current" ] && [ -r "$ROOT/dmem.capacity" ] || exit 1
 TMP=$(mktemp)
@@ -479,6 +482,48 @@ SCRIPT
     sudo chmod 755 "$HELPER"
 }
 
+write_helper_dmem_plus() {
+    sudo tee "$HELPER_DMEM_PLUS" >/dev/null <<'SCRIPT'
+#!/bin/bash
+
+# Navigate to the cgroup v2 mount point
+#cd /sys/fs/cgroup
+cd /sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service
+
+# Recursively enable +dmem in all cgroup.subtree_control files
+find . -type d | while read -r dir; do
+    if [ -f "$dir/cgroup.controllers" ] && grep -q "dmem" "$dir/cgroup.controllers"; then
+        echo "+dmem" | tee "$dir/cgroup.subtree_control" > /dev/null
+    fi
+done
+
+#Script May Fail on Some, that is Fine?
+exit 0
+SCRIPT
+    sudo chmod 755 "$HELPER_DMEM_PLUS"
+}
+
+
+
+write_service_dmem_plus() {
+    local uid="$1"
+    sudo tee "$SERVICE_DMEM_PLUS" >/dev/null <<EOF2
+[Unit]
+Description=Enable dmem on all cgroup2 Child Nodes if possible
+After=user@${uid}.service
+Requires=user@${uid}.service
+
+[Service]
+Type=oneshot
+ExecStart=${HELPER_DMEM_PLUS}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+}
+
+
 write_service() {
     local uid="$1"
     sudo tee "$SERVICE" >/dev/null <<EOF2
@@ -486,6 +531,9 @@ write_service() {
 Description=Apply app.slice VRAM safety limit
 After=user@${uid}.service
 Requires=user@${uid}.service
+#This will Start and enable the +_dmem in the cgroup.sub_controllers
+#Firstly Before Trying to Read the Paths
+Requires=enable_dmem_cgroup.service
 
 [Service]
 Type=oneshot
@@ -515,8 +563,17 @@ apply_limit() {
     sudo tee "$CONFIG" >/dev/null <<EOF2
 RESERVE_MIB=$reserve
 EOF2
+
+    write_helper_dmem_plus
+    write_service_dmem_plus "$UID_NOW"
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable enable_dmem_cgroup.service
+
+    
     write_helper
     write_service "$UID_NOW"
+
     sudo systemctl daemon-reload
     sudo systemctl enable dmemcg-appslice-limit.service
     if ! sudo systemctl restart dmemcg-appslice-limit.service; then
