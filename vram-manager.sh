@@ -488,11 +488,12 @@ write_helper_dmem_plus() {
 
 # Navigate to the cgroup v2 mount point
 #cd /sys/fs/cgroup
-#cd /sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service
-CGROUP_PATH="/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service"
+#cd /sys/fs/cgroup/user.slice/user-${USER_ID}.slice/user@${USER_ID}.service
+USER_ID="$1"
+CGROUP_PATH="/sys/fs/cgroup/user.slice/user-${USER_ID}.slice/user@${USER_ID}.service"
 
 # Recursively enable +dmem in all cgroup.subtree_control files
-find "CGROUP_PATH" -type d | while read -r dir; do
+find "$CGROUP_PATH" -type d | while read -r dir; do
     if [ -f "$dir/cgroup.controllers" ] && grep -q "dmem" "$dir/cgroup.controllers"; then
         echo "+dmem" | tee "$dir/cgroup.subtree_control" > /dev/null
     fi
@@ -516,7 +517,7 @@ After=dmemcg-booster-user.service graphical-session.target
 
 [Service]
 Type=oneshot
-ExecStart=${HELPER_DMEM_PLUS}
+ExecStart=${HELPER_DMEM_PLUS} ${uid}
 RemainAfterExit=yes
 
 [Install]
